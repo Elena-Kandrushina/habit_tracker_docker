@@ -223,7 +223,7 @@ jobs:
           # Проверяем подключение к базе данных
           docker compose exec -T db pg_isready -U ${{ secrets.USER || 'postgres' }}
           
-          # Проверяем подключение к redis
+          # Проверяем подклюение к redis
           docker compose exec -T redis redis-cli ping
           
           # Останавливаем контейнеры
