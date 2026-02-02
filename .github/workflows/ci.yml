@@ -30,7 +30,7 @@ jobs:
         run: poetry --version
 
       - name: Update poetry.lock
-        run: poetry lock --no-update
+        run: poetry lock
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
