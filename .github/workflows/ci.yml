@@ -22,12 +22,15 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.2
+          version: "1.8.2"
           virtualenvs-create: true
           virtualenvs-in-project: false
 
       - name: Verify Poetry installation
         run: poetry --version
+
+      - name: Update poetry.lock
+        run: poetry lock --no-update
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
@@ -87,12 +90,15 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-          version: 1.8.2
+          version: "1.8.2"
           virtualenvs-create: true
           virtualenvs-in-project: false
 
       - name: Verify Poetry installation
         run: poetry --version
+
+      - name: Update poetry.lock
+        run: poetry lock --no-update
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
@@ -262,7 +268,7 @@ jobs:
             echo "Collecting static files..."
             docker compose exec -T web python manage.py collectstatic --noinput
             
-            # Проверяем статус контейнеров
+            # Проверяем статус контейнеры
             echo "Checking container status..."
             docker compose ps
             
