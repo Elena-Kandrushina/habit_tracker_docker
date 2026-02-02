@@ -2,15 +2,11 @@ from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
 
 from .models import Habit, HabitCompletion
-from .validators import (
-    validate_duration,
-    validate_related_habit_and_reward,
-    validate_pleasant_habit,
-    validate_related_habit_is_pleasant,
-    validate_periodicity,
-    validate_habit_creation,
-    validate_habit_update,
-)
+from .validators import (validate_duration, validate_habit_creation,
+                         validate_habit_update, validate_periodicity,
+                         validate_pleasant_habit,
+                         validate_related_habit_and_reward,
+                         validate_related_habit_is_pleasant)
 
 
 class HabitCompletionSerializer(serializers.ModelSerializer):

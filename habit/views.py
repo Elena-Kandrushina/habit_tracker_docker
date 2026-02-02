@@ -1,12 +1,11 @@
-from rest_framework import viewsets, generics
-from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
-
+from rest_framework import generics, viewsets
+from rest_framework.permissions import IsAuthenticated
 
 from .models import Habit
-from .serializers import HabitSerializer, PublicHabitSerializer
-from .permissions import IsOwnerOrReadOnly
 from .pagination import HabitPagination
+from .permissions import IsOwnerOrReadOnly
+from .serializers import HabitSerializer, PublicHabitSerializer
 
 
 class HabitViewSet(viewsets.ModelViewSet):
