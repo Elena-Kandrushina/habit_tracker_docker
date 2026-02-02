@@ -40,8 +40,8 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-poetry-
 
-      - name: Install lint dependencies
-        run: poetry install --only lint --no-interaction
+      - name: Install dependencies
+        run: poetry install --with lint --no-root --no-interaction
 
       - name: Run flake8
         run: poetry run flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
@@ -109,7 +109,7 @@ jobs:
             ${{ runner.os }}-poetry-
 
       - name: Install dependencies
-        run: poetry install --no-interaction
+        run: poetry install --with lint --no-root --no-interaction
 
       - name: Run migrations
         run: python manage.py migrate --noinput
