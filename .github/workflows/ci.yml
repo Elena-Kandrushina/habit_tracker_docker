@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.10"
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -38,7 +38,7 @@ jobs:
             ${{ runner.os }}-poetry-
 
       - name: Install lint dependencies
-        run: poetry install --with lint --no-interaction
+        run: poetry install --only lint --no-interaction
 
       - name: Run flake8
         run: poetry run flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
@@ -82,7 +82,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.13"
+          python-version: "3.10"
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
