@@ -41,7 +41,20 @@ jobs:
             ${{ runner.os }}-poetry-
 
       - name: Install dependencies
-        run: poetry install --with lint --no-root --no-interaction
+        run: |
+          # Устанавливаем все основные зависимости
+          poetry install --no-root --no-interaction
+          
+          # Проверяем наличие линтеров, устанавливаем если нет
+          if ! poetry run flake8 --version 2>/dev/null; then
+            echo "Installing flake8..."
+            poetry add flake8 --group dev --no-root --no-interaction
+          fi
+          
+          if ! poetry run isort --version 2>/dev/null; then
+            echo "Installing isort..."
+            poetry add isort --group dev --no-root --no-interaction
+          fi
 
       - name: Run flake8
         run: poetry run flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
@@ -109,7 +122,7 @@ jobs:
             ${{ runner.os }}-poetry-
 
       - name: Install dependencies
-        run: poetry install --with lint --no-root --no-interaction
+        run: poetry install --no-root --no-interaction
 
       - name: Run migrations
         run: python manage.py migrate --noinput
