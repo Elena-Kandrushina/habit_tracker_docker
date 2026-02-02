@@ -1,0 +1,261 @@
+name: Django CI/CD Pipeline
+
+on:
+  push:
+    branches: [develop, feature/**]
+  pull_request:
+    branches: [develop]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.13"
+          cache: 'poetry'
+
+      - name: Install Poetry
+        run: pip install poetry==1.8.2
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('pyproject.toml', 'poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install lint dependencies
+        run: poetry install --with lint --no-interaction
+
+      - name: Run flake8
+        run: poetry run flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Run isort check
+        run: poetry run isort --check-only --diff .
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ${{ secrets.NAME || 'habit_tracker_test' }}
+          POSTGRES_USER: ${{ secrets.USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          timeout: 5s
+          retries: 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          interval: 10s
+          timeout: 5s
+          retries: 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.13"
+          cache: 'poetry'
+
+      - name: Install Poetry
+        run: pip install poetry==1.8.2
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('pyproject.toml', 'poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: poetry install --no-interaction
+
+      - name: Run migrations
+        run: python manage.py migrate --noinput
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: ${{ secrets.DEBUG }}
+          NAME: ${{ secrets.NAME || 'habit_tracker_test' }}
+          USER: ${{ secrets.USER || 'postgres' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+          HOST: localhost
+          PORT: ${{ secrets.PORT || '5432' }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CELERY_BROKER_URL: redis://localhost:6379
+          CELERY_RESULT_BACKEND: redis://localhost:6379
+
+      - name: Run Django tests
+        run: |
+          python manage.py test --verbosity=2 --noinput
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: ${{ secrets.DEBUG }}
+          NAME: ${{ secrets.NAME || 'habit_tracker_test' }}
+          USER: ${{ secrets.USER || 'postgres' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+          HOST: localhost
+          PORT: ${{ secrets.PORT || '5432' }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CELERY_BROKER_URL: redis://localhost:6379
+          CELERY_RESULT_BACKEND: redis://localhost:6379
+
+      - name: Run coverage
+        run: |
+          poetry run coverage run --source='.' manage.py test --noinput
+          poetry run coverage report
+          poetry run coverage xml
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: ${{ secrets.DEBUG }}
+          NAME: ${{ secrets.NAME || 'habit_tracker_test' }}
+          USER: ${{ secrets.USER || 'postgres' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+          HOST: localhost
+          PORT: ${{ secrets.PORT || '5432' }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CELERY_BROKER_URL: redis://localhost:6379
+          CELERY_RESULT_BACKEND: redis://localhost:6379
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  docker-build:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env for Docker build
+        run: |
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+          echo "DEBUG=${{ secrets.DEBUG }}" >> .env
+          echo "NAME=${{ secrets.NAME }}" >> .env
+          echo "USER=${{ secrets.USER }}" >> .env
+          echo "PASSWORD=${{ secrets.PASSWORD }}" >> .env
+          echo "HOST=db" >> .env
+          echo "PORT=${{ secrets.PORT || '5432' }}" >> .env
+          echo "TELEGRAM_TOKEN=${{ secrets.TELEGRAM_TOKEN }}" >> .env
+
+      - name: Build Docker images
+        run: |
+          docker compose build --progress=plain
+
+      - name: Test Docker Compose configuration
+        run: |
+          docker compose config
+
+      - name: Test Docker containers startup
+        run: |
+          # Запускаем только базу данных и redis для теста
+          docker compose up -d db redis
+          sleep 10
+          
+          # Проверяем, что сервисы запустились
+          docker compose ps
+          
+          # Проверяем подключение к базе данных
+          docker compose exec -T db pg_isready -U ${{ secrets.USER || 'postgres' }}
+          
+          # Проверяем подключение к redis
+          docker compose exec -T redis redis-cli ping
+          
+          # Останавливаем контейнеры
+          docker compose down
+
+      - name: Clean up
+        if: always()
+        run: |
+          docker system prune -af --volumes
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || '22' }}
+          script: |
+            echo "Starting deployment of Habit Tracker..."
+            
+            # Переходим в директорию проекта
+            cd ${{ secrets.DEPLOY_DIR || '/app/habit-tracker' }}
+            
+            # Обновляем код из репозитория
+            echo "Pulling latest code from ${{ github.ref_name }} branch..."
+            git fetch origin
+            git checkout ${{ github.ref_name }}
+            git pull origin ${{ github.ref_name }}
+            
+            # Обновляем .env файл с секретами
+            echo "Updating environment configuration..."
+            cat > .env << 'EOF'
+            SECRET_KEY=${{ secrets.SECRET_KEY }}
+            DEBUG=False
+            NAME=${{ secrets.NAME }}
+            USER=${{ secrets.USER }}
+            PASSWORD=${{ secrets.PASSWORD }}
+            HOST=db
+            PORT=5432
+            TELEGRAM_TOKEN=${{ secrets.TELEGRAM_TOKEN }}
+            EOF
+            
+            # Перезапускаем Docker контейнеры
+            echo "Restarting Docker containers..."
+            docker compose down
+            docker compose up -d --build
+            
+            # Выполняем миграции
+            echo "Running database migrations..."
+            docker compose exec -T web python manage.py migrate --noinput
+            
+            # Собираем статику
+            echo "Collecting static files..."
+            docker compose exec -T web python manage.py collectstatic --noinput
+            
+            # Проверяем статус контейнеров
+            echo "Checking container status..."
+            docker compose ps
+            
+            # Проверяем логи
+            echo "Recent logs from web service:"
+            docker compose logs --tail=10 web
+            
+            echo "Habit Tracker deployment completed successfully!"  
