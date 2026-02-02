@@ -72,7 +72,7 @@ TOTAL                                     760    106    86%
 
 1. Клонируйте репозиторий:
 ```
-git@github.com:Elena-Kandrushina/habit_tracker.git
+git@github.com:Elena-Kandrushina/habit_tracker_docker.git
 ```
 
 2. Установите зависимости:
