@@ -29,8 +29,10 @@ jobs:
       - name: Verify Poetry installation
         run: poetry --version
 
-      - name: Update poetry.lock
-        run: poetry lock
+      - name: Clean and update poetry.lock
+        run: |
+          rm -f poetry.lock
+          poetry lock
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
@@ -110,8 +112,10 @@ jobs:
       - name: Verify Poetry installation
         run: poetry --version
 
-      - name: Update poetry.lock
-        run: poetry lock --no-update
+      - name: Clean and update poetry.lock
+        run: |
+          rm -f poetry.lock
+          poetry lock --no-update
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
