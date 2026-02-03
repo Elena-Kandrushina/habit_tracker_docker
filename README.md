@@ -79,6 +79,15 @@ git@github.com:Elena-Kandrushina/habit_tracker_docker.git
 ```
 poetry install
 ```
+Проект использует GitHub Actions для автоматизации:
+
+Линтинг: Flake8, isort проверка
+
+Тестирование: Django tests с PostgreSQL и Redis
+
+Сборка Docker: Тестирование Docker конфигурации
+
+Деплой: Автоматический деплой на сервер при пуше в develop
 
 ## Документация:
 
