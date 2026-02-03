@@ -29,10 +29,6 @@ jobs:
       - name: Verify Poetry installation
         run: poetry --version
 
-      - name: Clean and update poetry.lock
-        run: |
-          rm -f poetry.lock
-          poetry lock
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
@@ -44,19 +40,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          # Устанавливаем все основные зависимости
-          poetry install --no-root --no-interaction
           
-          # Проверяем наличие линтеров, устанавливаем если нет
-          if ! poetry run flake8 --version 2>/dev/null; then
-            echo "Installing flake8..."
-            poetry add flake8 --group dev --no-root --no-interaction
-          fi
+          poetry install --no-interaction
           
-          if ! poetry run isort --version 2>/dev/null; then
-            echo "Installing isort..."
-            poetry add isort --group dev --no-root --no-interaction
-          fi
+          # Проверяем установку
+          poetry run python -c "import django; print(f'Django {django.__version__} installed')"
+          poetry run flake8 --version
+          poetry run isort --version
 
       - name: Run flake8
         run: poetry run flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
@@ -112,10 +102,6 @@ jobs:
       - name: Verify Poetry installation
         run: poetry --version
 
-      - name: Clean and update poetry.lock
-        run: |
-          rm -f poetry.lock
-          poetry lock --no-update
 
       - name: Cache Poetry dependencies
         uses: actions/cache@v3
@@ -126,10 +112,17 @@ jobs:
             ${{ runner.os }}-poetry-
 
       - name: Install dependencies
-        run: poetry install --no-root --no-interaction
+        run: |
+          
+          poetry install --no-interaction
+          
+          
+          echo "Checking Django installation:"
+          poetry run python -c "import django; print(f'Django {django.__version__} installed')"
+
 
       - name: Run migrations
-        run: python manage.py migrate --noinput
+        run: poetry run python manage.py migrate --noinput
         env:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEBUG: ${{ secrets.DEBUG }}
@@ -144,7 +137,7 @@ jobs:
 
       - name: Run Django tests
         run: |
-          python manage.py test --verbosity=2 --noinput
+          poetry run python manage.py test --verbosity=2 --noinput
         env:
           SECRET_KEY: ${{ secrets.SECRET_KEY }}
           DEBUG: ${{ secrets.DEBUG }}
@@ -223,7 +216,7 @@ jobs:
           # Проверяем подключение к базе данных
           docker compose exec -T db pg_isready -U ${{ secrets.USER || 'postgres' }}
           
-          # Проверяем подклюение к redis
+          # Проверяем подключение к redis
           docker compose exec -T redis redis-cli ping
           
           # Останавливаем контейнеры
