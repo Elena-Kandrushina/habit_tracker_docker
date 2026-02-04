@@ -1,8 +1,9 @@
-from django.test import TestCase
-from django.contrib.auth import get_user_model
-from rest_framework.test import APITestCase, APIClient
-from rest_framework import status
 from datetime import time
+
+from django.contrib.auth import get_user_model
+from django.test import TestCase
+from rest_framework import status
+from rest_framework.test import APIClient, APITestCase
 
 from habit.models import Habit
 from habit.validators import validate_duration, validate_periodicity

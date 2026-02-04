@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  nginx:
+    build: ./nginx
+    container_name: habit_tracker_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      - web
+    networks:
+      - habit_network
+
+  web:
+    build: .
+    container_name: habit_tracker_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG}
+      - SECRET_KEY=${SECRET_KEY}
+      - NAME=${NAME}
+      - USER=${USER}
+      - PASSWORD=${PASSWORD}
+      - HOST=db
+      - PORT=${PORT}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - CELERY_BROKER_URL=redis://redis:6379
+      - CELERY_RESULT_BACKEND=redis://redis:6379
+    volumes:
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+      - ./:/app
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - habit_network
+    command: >
+      sh -c "python manage.py migrate --noinput &&
+             python manage.py collectstatic --noinput &&
+             python manage.py runserver 0.0.0.0:8000"
+
+  db:
+    image: postgres:16-alpine
+    container_name: habit_tracker_db
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${NAME}
+      POSTGRES_USER: ${USER}
+      POSTGRES_PASSWORD: ${PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - habit_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: habit_tracker_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - habit_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery:
+    build: .
+    container_name: habit_tracker_celery
+    restart: unless-stopped
+    command: celery -A config worker --loglevel=info
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG}
+      - SECRET_KEY=${SECRET_KEY}
+      - NAME=${NAME}
+      - USER=${USER}
+      - PASSWORD=${PASSWORD}
+      - HOST=db
+      - PORT=${PORT}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - CELERY_BROKER_URL=redis://redis:6379
+      - CELERY_RESULT_BACKEND=redis://redis:6379
+    volumes:
+      - ./:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - habit_network
+
+  celery-beat:
+    build: .
+    container_name: habit_tracker_celery_beat
+    restart: unless-stopped
+    command: celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    env_file:
+      - .env
+    environment:
+      - DEBUG=${DEBUG}
+      - SECRET_KEY=${SECRET_KEY}
+      - NAME=${NAME}
+      - USER=${USER}
+      - PASSWORD=${PASSWORD}
+      - HOST=db
+      - PORT=${PORT}
+      - TELEGRAM_TOKEN=${TELEGRAM_TOKEN}
+      - CELERY_BROKER_URL=redis://redis:6379
+      - CELERY_RESULT_BACKEND=redis://redis:6379
+    volumes:
+      - ./:/app
+      - static_volume:/app/staticfiles
+      - media_volume:/app/media
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - habit_network
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
+
+networks:
+  habit_network:
+    driver: bridge

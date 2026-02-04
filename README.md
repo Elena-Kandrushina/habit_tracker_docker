@@ -26,47 +26,7 @@ coverage report
 ```
 coverage html
 ```
-Покрытие составляет:
-```
-Name                                    Stmts   Miss  Cover
------------------------------------------------------------
-config\__init__.py                          2      0   100%
-config\asgi.py                              4      4     0%
-config\celery.py                            6      0   100%
-config\settings.py                         42      0   100%
-config\urls.py                             13      0   100%
-config\wsgi.py                              4      4     0%
-habit\__init__.py                           0      0   100%
-habit\admin.py                             23      2    91%
-habit\apps.py                               4      0   100%
-habit\migrations\0001_initial.py            7      0   100%
-habit\migrations\0002_initial.py            7      0   100%
-habit\migrations\__init__.py                0      0   100%
-habit\models.py                            35      2    94%
-habit\pagination.py                         5      0   100%
-habit\permissions.py                       14      4    71%
-habit\serializers.py                       53      9    83%
-habit\services.py                          15     15     0%
-habit\tasks.py                             18     18     0%
-habit\tests.py                             99      0   100%
-habit\urls.py                               7      0   100%
-habit\validators.py                        75     43    43%
-habit\views.py                             23      0   100%
-manage.py                                  11      2    82%
-users\__init__.py                           0      0   100%
-users\admin.py                             13      0   100%
-users\apps.py                               4      0   100%
-users\migrations\0001_initial.py            6      0   100%
-users\migrations\0002_user_chat_id.py       4      0   100%
-users\migrations\__init__.py                0      0   100%
-users\models.py                            36      2    94%
-users\serializers.py                       51      1    98%
-users\tests.py                            147      0   100%
-users\urls.py                               6      0   100%
-users\views.py                             26      0   100%
------------------------------------------------------------
-TOTAL                                     760    106    86%
-```
+
 
 ## Установка:
 
@@ -79,6 +39,104 @@ git@github.com:Elena-Kandrushina/habit_tracker_docker.git
 ```
 poetry install
 ```
+Проект использует GitHub Actions для автоматизации:
+
+Линтинг: Flake8, isort проверка
+
+Тестирование: Django tests с PostgreSQL и Redis
+
+Сборка Docker: Тестирование Docker конфигурации
+
+Деплой: Автоматический деплой на сервер при пуше.
+
+## Запуск проекта через Docker Compose
+## Отредактируйте файл .env и заполните минимальные настройки:
+```
+SECRET_KEY=ваш-секретный-ключ
+DEBUG=True
+NAME=habit_tracker
+USER=postgres
+PASSWORD=ваш-пароль
+HOST=db
+PORT=5432
+TELEGRAM_TOKEN=ваш-телеграм-токен
+```
+## Основная команда для запуска:
+```
+docker-compose up -d
+```
+## Проверка статуса запуска:
+```
+docker-compose ps
+```
+## Проверка работоспособности каждого сервиса:
+Проверка бэкенда (Django):
+откройте в браузере: http://localhost:8000
+Проверка логов бэкенда:
+```
+docker-compose logs --tail=10 web
+```
+Создание суперпользователя:
+```
+docker-compose exec web python manage.py createsuperuser
+```
+## Проверка базы данных:
+```
+docker-compose exec db psql -U postgres -d habit_tracker -c "SELECT version();"
+```
+## Проверка Redis:
+```
+docker-compose exec redis redis-cli ping
+```
+## Проверка Celery Worker(логи):
+```
+docker-compose logs --tail=10 celery
+```
+## Проверка Celery Beat (вывод логов):
+```
+docker-compose logs --tail=10 celery-beat
+```
+
+## Настройка сервера:
+Установите Docker и Docker Compose
+```
+sudo apt-get update
+sudo apt-get install docker.io docker-compose
+```
+## CI/CD с GitHub Actions
+Добавьте следующие секреты:
+SERVER_HOST, SERVER_USER, SSH_PRIVATE_KEY, SECRET_KEY
+При каждом push в любую ветку запускаются тесты, после успешных тестов происходит деплой
+
+# Просмотр логов
+
+```
+docker-compose logs
+```
+# Отдельные сервисы
+```
+docker-compose logs web
+docker-compose logs nginx
+docker-compose logs db
+docker-compose logs redis
+```
+# Приложение доступно по адресу:
+```
+http://89.169.180.227/
+```
+админка:
+```
+http://89.169.180.227/admin/
+```
+# Вывод документации для проекта  
+```
+http://89.169.180.227/swagger/
+```
+или 
+```
+http://89.169.180.227/redoc/
+```
+
 
 ## Документация:
 

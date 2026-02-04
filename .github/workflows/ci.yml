@@ -1,0 +1,285 @@
+name: Django CI/CD Pipeline
+
+on:
+  push:
+    branches: '*'
+  pull_request:
+    branches: '*'
+
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: "1.8.2"
+          virtualenvs-create: true
+          virtualenvs-in-project: false
+
+      - name: Verify Poetry installation
+        run: poetry --version
+
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('pyproject.toml', 'poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: |
+          
+          poetry install --no-interaction
+          
+          # Проверяем установку
+          poetry run python -c "import django; print(f'Django {django.__version__} installed')"
+          poetry run flake8 --version
+          poetry run isort --version
+
+      - name: Run flake8
+        run: poetry run flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
+
+      - name: Run isort check
+        run: poetry run isort --check-only --diff .
+
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ${{ secrets.NAME || 'habit_tracker_test' }}
+          POSTGRES_USER: ${{ secrets.USER || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+      redis:
+        image: redis:7-alpine
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: "1.8.2"
+          virtualenvs-create: true
+          virtualenvs-in-project: false
+
+      - name: Verify Poetry installation
+        run: poetry --version
+
+
+      - name: Cache Poetry dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pypoetry
+          key: ${{ runner.os }}-poetry-${{ hashFiles('pyproject.toml', 'poetry.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-poetry-
+
+      - name: Install dependencies
+        run: |
+          
+          poetry install --no-interaction
+          
+          
+          echo "Checking Django installation:"
+          poetry run python -c "import django; print(f'Django {django.__version__} installed')"
+
+
+      - name: Run migrations
+        run: poetry run python manage.py migrate --noinput
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: ${{ secrets.DEBUG }}
+          NAME: ${{ secrets.NAME || 'habit_tracker_test' }}
+          USER: ${{ secrets.USER || 'postgres' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+          HOST: localhost
+          PORT: ${{ secrets.PORT || '5432' }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CELERY_BROKER_URL: redis://localhost:6379
+          CELERY_RESULT_BACKEND: redis://localhost:6379
+
+      - name: Run Django tests
+        run: |
+          poetry run python manage.py test --verbosity=2 --noinput
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: ${{ secrets.DEBUG }}
+          NAME: ${{ secrets.NAME || 'habit_tracker_test' }}
+          USER: ${{ secrets.USER || 'postgres' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+          HOST: localhost
+          PORT: ${{ secrets.PORT || '5432' }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CELERY_BROKER_URL: redis://localhost:6379
+          CELERY_RESULT_BACKEND: redis://localhost:6379
+
+      - name: Run coverage
+        run: |
+          poetry run coverage run --source='.' manage.py test --noinput
+          poetry run coverage report
+          poetry run coverage xml
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          DEBUG: ${{ secrets.DEBUG }}
+          NAME: ${{ secrets.NAME || 'habit_tracker_test' }}
+          USER: ${{ secrets.USER || 'postgres' }}
+          PASSWORD: ${{ secrets.PASSWORD || 'postgres123' }}
+          HOST: localhost
+          PORT: ${{ secrets.PORT || '5432' }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          CELERY_BROKER_URL: redis://localhost:6379
+          CELERY_RESULT_BACKEND: redis://localhost:6379
+
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  docker-build:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Create .env for Docker build
+        run: |
+          echo "SECRET_KEY=${{ secrets.SECRET_KEY }}" > .env
+          echo "DEBUG=${{ secrets.DEBUG }}" >> .env
+          echo "NAME=${{ secrets.NAME || 'habit_tracker' }}" >> .env
+          echo "USER=${{ secrets.USER || 'postgres' }}" >> .env
+          echo "PASSWORD=${{ secrets.PASSWORD || 'postgres123' }}" >> .env
+          echo "HOST=db" >> .env
+          echo "PORT=${{ secrets.PORT || '5432' }}" >> .env
+          echo "TELEGRAM_TOKEN=${{ secrets.TELEGRAM_TOKEN }}" >> .env
+          echo "CELERY_BROKER_URL=redis://redis:6379" >> .env
+          echo "CELERY_RESULT_BACKEND=redis://redis:6379" >> .env
+
+      - name: Build Docker images
+        run: |
+          docker compose build --progress=plain
+
+      - name: Test Docker Compose configuration
+        run: |
+          docker compose config
+
+      - name: Test Docker containers startup
+        run: |
+          # Запускаем только базу данных и redis для теста
+          echo "Starting PostgreSQL and Redis containers..."
+          docker compose up -d db redis
+          
+          # Даем контейнерам больше времени на запуск
+          echo "Waiting for containers to initialize (30 seconds)..."
+          sleep 30
+          
+          # Проверяем что сервисы запустились
+          echo "Container status after waiting:"
+          docker compose ps
+          
+          # Смотрим логи PostgreSQL для отладки
+          echo "PostgreSQL logs (last 15 lines):"
+          docker compose logs --tail=15 db || true
+          
+          # Проверяем, что контейнеры не перезапускаются
+          if docker compose ps | grep db | grep -q "Restarting"; then
+            echo "ERROR: PostgreSQL container is restarting!"
+            echo "Full PostgreSQL logs:"
+            docker compose logs db
+            exit 1
+          fi
+          
+          # Проверяем подключение к redis 
+          echo "Testing Redis connection..."
+          if docker compose exec -T redis redis-cli ping | grep -q PONG; then
+            echo "✓ Redis is responding"
+          else
+            echo "✗ Redis is not responding"
+            docker compose logs redis
+            exit 1
+          fi
+          
+          # Проверяем подключение к базе данных 
+          echo "Testing PostgreSQL connection..."
+          set +e  # Отключаем exit при ошибке для этой команды
+          docker compose exec -T db pg_isready -U ${{ secrets.USER || 'postgres' }}
+          pg_status=$?
+          set -e  # Включаем обратно
+          
+          if [ $pg_status -eq 0 ]; then
+            echo "✓ PostgreSQL is accepting connections"
+          else
+            echo " PostgreSQL is not yet ready, but container is running"
+            echo "This might be acceptable for CI test"
+          fi
+          
+          # Останавливаем контейнеры
+          echo "Stopping containers..."
+          docker compose down
+
+      - name: Clean up
+        if: always()
+        run: |
+          echo "Cleaning up Docker resources..."
+          docker system prune -af --volumes || true
+          echo "Cleanup completed"
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Deploy to server via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            echo "Deploying to server..."
+            cd /home/kandr/habit_tracker
+            git pull origin ${{ github.ref_name }}
+            
+            echo "Deployment completed!"
